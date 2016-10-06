@@ -17,15 +17,37 @@ namespace Titanium.Web.Proxy
     /// </summary>
     public partial class ProxyServer : IDisposable
     {
-        /// <summary>
-        /// Does the root certificate used by this proxy is trusted by the machine?
-        /// </summary>
-        private bool certTrusted { get; set; }
+	    private static readonly Lazy<Action<Exception>> _defaultExceptionFunc = new Lazy<Action<Exception>>(() => (e => { }));
+        private static Action<Exception> _exceptionFunc;
+        public static Action<Exception> ExceptionFunc
+        {
+            get
+            {
+				return _exceptionFunc ?? _defaultExceptionFunc.Value;
+            }
+            set
+            {
+                _exceptionFunc = value;
+            }
+        }
+        public Func<string, string, Task<bool>> AuthenticateUserFunc
+        {
+            get;
+            set;
+        }
+        //parameter is list of headers
+        public Func<SessionEventArgs, Task<ExternalProxy>> GetCustomUpStreamHttpProxyFunc
+        {
+            get;
+            set;
+        }
+        //parameter is list of headers
+        public Func<SessionEventArgs, Task<ExternalProxy>> GetCustomUpStreamHttpsProxyFunc
+        {
+            get;
+            set;
+        }
 
-        /// <summary>
-        /// Is the proxy currently running
-        /// </summary>
-        private bool proxyRunning { get; set; }
 
         /// <summary>
         /// Manages certificates used by this proxy
@@ -43,6 +65,16 @@ namespace Titanium.Web.Proxy
         private SystemProxyManager systemProxySettingsManager { get; set; }
 
         private FireFoxProxySettingsManager firefoxProxySettingsManager { get; set; }
+
+        /// <summary>
+        /// Does the root certificate used by this proxy is trusted by the machine?
+        /// </summary>
+        private bool certTrusted { get; set; }
+
+        /// <summary>
+        /// Is the proxy currently running
+        /// </summary>
+        private bool proxyRunning { get; set; }
 
         /// <summary>
         /// Buffer size used throughout this proxy
@@ -88,12 +120,12 @@ namespace Titanium.Web.Proxy
         /// <summary>
         /// External proxy for Http
         /// </summary>
-        public ExternalProxy ExternalHttpProxy { get; set; }
+        public ExternalProxy UpStreamHttpProxy { get; set; }
 
         /// <summary>
-        /// External proxy for Https
+        /// External proxy for Http
         /// </summary>
-        public ExternalProxy ExternalHttpsProxy { get; set; }
+        public ExternalProxy UpStreamHttpsProxy { get; set; }
 
         /// <summary>
         /// Verifies the remote Secure Sockets Layer (SSL) certificate used for authentication
@@ -116,6 +148,11 @@ namespace Titanium.Web.Proxy
         public SslProtocols SupportedSslProtocols { get; set; } = SslProtocols.Tls | SslProtocols.Tls11 | SslProtocols.Tls12 | SslProtocols.Ssl3;
 
         /// <summary>
+        /// Is the proxy currently running
+        /// </summary>
+        public bool ProxyRunning => proxyRunning;
+
+        /// <summary>
         /// Constructor
         /// </summary>
         public ProxyServer() : this(null, null) { }
@@ -135,9 +172,6 @@ namespace Titanium.Web.Proxy
 
             RootCertificateName = RootCertificateName ?? "Titanium Root Certificate Authority";
             RootCertificateIssuerName = RootCertificateIssuerName ?? "Titanium";
-
-            certificateCacheManager = new CertificateManager(RootCertificateIssuerName,
-                RootCertificateName);
         }
 
         /// <summary>
@@ -269,7 +303,10 @@ namespace Titanium.Web.Proxy
                 throw new Exception("Proxy is already running.");
             }
 
-            certTrusted = certificateCacheManager.CreateTrustedRootCertificate().Result;
+            certificateCacheManager = new CertificateManager(RootCertificateIssuerName,
+                RootCertificateName);
+
+            certTrusted = certificateCacheManager.CreateTrustedRootCertificate();
 
             foreach (var endPoint in ProxyEndPoints)
             {
@@ -308,7 +345,7 @@ namespace Titanium.Web.Proxy
 
             ProxyEndPoints.Clear();
 
-            certificateCacheManager.StopClearIdleCertificates();
+            certificateCacheManager?.StopClearIdleCertificates();
 
             proxyRunning = false;
         }
@@ -382,6 +419,7 @@ namespace Titanium.Web.Proxy
                 //Other errors are discarded to keep proxy running
             }
 
+
             if (tcpClient != null)
             {
                 Task.Run(async () =>
@@ -394,6 +432,8 @@ namespace Titanium.Web.Proxy
                         }
                         else
                         {
+
+
                             await HandleClient(endPoint as ExplicitProxyEndPoint, tcpClient);
                         }
 
@@ -402,12 +442,11 @@ namespace Titanium.Web.Proxy
                     {
                         if (tcpClient != null)
                         {
-                            tcpClient.LingerState = new LingerOption(true, 0);
                             tcpClient.Client.Shutdown(SocketShutdown.Both);
                             tcpClient.Client.Close();
                             tcpClient.Client.Dispose();
-
                             tcpClient.Close();
+
                         }
                     }
                 });
@@ -424,7 +463,7 @@ namespace Titanium.Web.Proxy
                 Stop();
             }
 
-            certificateCacheManager.Dispose();
+            certificateCacheManager?.Dispose();
         }
     }
 }
