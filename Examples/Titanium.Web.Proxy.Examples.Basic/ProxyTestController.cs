@@ -79,7 +79,8 @@ namespace Titanium.Web.Proxy.Examples.Basic
             ////read request headers
             var requestHeaders = e.WebSession.Request.RequestHeaders;
 
-            if ((e.WebSession.Request.Method == "POST" || e.WebSession.Request.Method == "PUT"))
+            var method = e.WebSession.Request.Method.ToUpper();
+            if ((method == "POST" || method == "PUT" || method == "PATCH"))
             {
                 //Get/Set request body bytes
                 byte[] bodyBytes = await e.GetRequestBody();
@@ -117,7 +118,7 @@ namespace Titanium.Web.Proxy.Examples.Basic
             var responseHeaders = e.WebSession.Response.ResponseHeaders;
 
             // print out process id of current session
-            Console.WriteLine($"PID: {e.WebSession.ProcessId}");
+            Console.WriteLine($"PID: {e.WebSession.ProcessId.Value}");
 
             //if (!e.ProxySession.Request.Host.Equals("medeczane.sgk.gov.tr")) return;
             if (e.WebSession.Request.Method == "GET" || e.WebSession.Request.Method == "POST")
